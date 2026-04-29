@@ -25,8 +25,7 @@ app.get('/', (req, res) => {
 app.get('/api/page/:title', async (req, res) => {
     try {
         const title = req.params.title;
-        // tr.wikipedia.org for Turkish Wikipedia, action=parse to get HTML
-        const url = `https://tr.wikipedia.org/w/api.php?action=parse&page=${encodeURIComponent(title)}&prop=text|displaytitle&format=json&origin=*`;
+        const url = `https://tr.wikipedia.org/w/api.php?action=parse&page=${encodeURIComponent(title)}&prop=text|displaytitle|sections&format=json&origin=*`;
         
         const response = await fetch(url);
         if (!response.ok) {
@@ -41,7 +40,8 @@ app.get('/api/page/:title', async (req, res) => {
         res.json({
             title: data.parse.title,
             displaytitle: data.parse.displaytitle,
-            text: data.parse.text['*']
+            text: data.parse.text['*'],
+            sections: data.parse.sections || []
         });
     } catch (error) {
         console.error('Error fetching Wikipedia page:', error);
@@ -69,6 +69,7 @@ io.on('connection', (socket) => {
             ],
             startPage: null,
             targetPage: null,
+            gameMode: 'speed', // 'speed' or 'clicks'
             gameStarted: false,
             startTime: null
         };
@@ -114,11 +115,12 @@ io.on('connection', (socket) => {
     });
 
     // Start Game (Only host)
-    socket.on('start-game', ({ roomId, startPage, targetPage }) => {
+    socket.on('start-game', ({ roomId, startPage, targetPage, gameMode }) => {
         const room = rooms[roomId];
         if (room && room.hostId === socket.id) {
             room.startPage = startPage;
             room.targetPage = targetPage;
+            room.gameMode = gameMode || 'speed';
             room.gameStarted = true;
             room.startTime = Date.now();
             
@@ -127,7 +129,7 @@ io.on('connection', (socket) => {
                 p.clicks = 0;
             });
             
-            io.to(roomId).emit('game-started', { startPage, targetPage, players: room.players });
+            io.to(roomId).emit('game-started', { startPage, targetPage, gameMode: room.gameMode, players: room.players });
         }
     });
 
@@ -154,6 +156,17 @@ io.on('connection', (socket) => {
                 player.timeElapsed = timeElapsed;
                 
                 io.to(roomId).emit('game-finished', { winner: player, players: room.players });
+            }
+        }
+    });
+
+    // Send Emoji Reaction
+    socket.on('send-emoji', ({ roomId, emoji }) => {
+        const room = rooms[roomId];
+        if (room) {
+            const player = room.players.find(p => p.id === socket.id);
+            if (player) {
+                socket.to(roomId).emit('emoji-received', { playerName: player.name, emoji });
             }
         }
     });
