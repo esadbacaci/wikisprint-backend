@@ -147,13 +147,14 @@ io.on('connection', (socket) => {
     });
 
     // Finish Game
-    socket.on('finish-game', ({ roomId, timeElapsed }) => {
+    socket.on('finish-game', ({ roomId, timeElapsed, pageHistory }) => {
         const room = rooms[roomId];
         if (room && room.gameStarted) {
             const player = room.players.find(p => p.id === socket.id);
             if (player && !player.isFinished) {
                 player.isFinished = true;
                 player.timeElapsed = timeElapsed;
+                player.pageHistory = pageHistory || [];
                 
                 io.to(roomId).emit('game-finished', { winner: player, players: room.players });
             }
